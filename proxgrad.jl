@@ -26,11 +26,12 @@ is_differentiable(l::OvALoss) = is_differentiable(l.bin_loss)
 is_differentiable(l::PeriodicLoss) = true
 
 function proxgrad(loss::Loss, args...; kwargs...)
-  if is_differentiable(loss)
-    return proxgrad_linesearch(loss, args...; kwargs...)
-  else
-    return proxgrad_dec(loss, args...; kwargs...)
-  end
+  return proxgrad_linesearch(loss, args...; kwargs...)
+  # if is_differentiable(loss)
+  #   return proxgrad_linesearch(loss, args...; kwargs...)
+  # else
+  #   return proxgrad_dec(loss, args...; kwargs...)
+  # end
 end
 
 function proxgrad_linesearch(loss::Loss, reg::Regularizer, X::Array{Float64,2}, y;
@@ -62,10 +63,14 @@ function proxgrad_dec(loss::Loss, reg::Regularizer, X::Array{Float64,2}, y;
                   maxiters = 100,
                   stepsize = 1,
                   w = (embedding_dim(loss)==1 ? zeros(size(X,2)) : zeros(size(X,2), embedding_dim(loss))),
-                  ch = ConvergenceHistory("proxgrad"))
+                  ch = ConvergenceHistory("proxgrad"),
+                  verbose = true)
     wbest = copy(w)
     update_ch!(ch, 0, evaluate(loss, X, w, y) + evaluate(reg, w))
     t = time()
+    if verbose
+      println("using decreasing stepsize for nondifferentiable loss")
+    end
     for i=1:maxiters
         # gradient
         g = grad(loss, X, w, y)
@@ -74,6 +79,9 @@ function proxgrad_dec(loss::Loss, reg::Regularizer, X::Array{Float64,2}, y;
         # record objective value
         obj = evaluate(loss, X, w, y) + evaluate(reg, w)
         if obj < ch.objective[end]
+          if verbose
+            println("found a better obj $obj")
+          end
           copy!(wbest, w)
           update_ch!(ch, time() - t, obj)
         end
