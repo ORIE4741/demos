@@ -1,4 +1,4 @@
-County,Year,Population,Index Count,Index Rate,Violent Count,Violent Rate,Property Count,Property Rate,Firearm Count,Firearm Rate
+County,Year,Population,Index_Count,Index_Rate,Violent_Count,Violent_Rate,Property_Count,Property_Rate,Firearm_Count,Firearm_Rate
 Albany,2015,308613,8224,2664.8,1005,325.7,7219,2339.2,111,36.0
 Albany,2014,308166,9157,2971.5,995,322.9,8162,2648.6,146,47.4
 Albany,2013,306300,9455,3086.8,1002,327.1,8453,2759.7,150,49.0
