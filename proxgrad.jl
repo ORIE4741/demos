@@ -8,60 +8,50 @@ grad(loss::Loss, X::Array{Float64,2}, w::Array{Float64,1}, y) = X'*grad(loss, X*
 evaluate(loss::Loss, X::Array{Float64,2}, w::Array{Float64,2}, y) = evaluate(loss, X*w, y)
 grad(loss::Loss, X::Array{Float64,2}, w::Array{Float64,2}, y) = X'*grad(loss, X*w, y)
 
-export evaluate, grad, proxgrad, is_differentiable
-
-is_differentiable(l::QuadLoss) = true
-is_differentiable(l::L1Loss) = false
-is_differentiable(l::HuberLoss) = true
-is_differentiable(l::QuantileLoss) = false
-is_differentiable(l::PoissonLoss) = true
-is_differentiable(l::WeightedHingeLoss) = false
-is_differentiable(l::LogisticLoss) = true
-is_differentiable(l::OrdinalHingeLoss) = false
-is_differentiable(l::OrdisticLoss) = true
-is_differentiable(l::MultinomialOrdinalLoss) = true
-is_differentiable(l::BvSLoss) = is_differentiable(l.bin_loss)
-is_differentiable(l::MultinomialLoss) = true
-is_differentiable(l::OvALoss) = is_differentiable(l.bin_loss)
-is_differentiable(l::PeriodicLoss) = true
+export evaluate, grad, proxgrad
 
 function proxgrad(loss::Loss, args...; kwargs...)
   return proxgrad_linesearch(loss, args...; kwargs...)
-  # if is_differentiable(loss)
-  #   return proxgrad_linesearch(loss, args...; kwargs...)
-  # else
-  #   return proxgrad_dec(loss, args...; kwargs...)
-  # end
 end
 
+"""proximal gradient method with Armijo-Wolfe linesearch"""
 function proxgrad_linesearch(loss::Loss, reg::Regularizer, X::Array{Float64,2}, y;
                   maxiters = 100,
-                  stepsize = 1,
+                  stepsize = 1.,
+                  c = .1, # sufficient decrease
                   w = (embedding_dim(loss)==1 ? zeros(size(X,2)) : zeros(size(X,2), embedding_dim(loss))),
                   ch = ConvergenceHistory("proxgrad"))
-    update_ch!(ch, 0, evaluate(loss, X, w, y) + evaluate(reg, w))
+    oldloss = evaluate(loss, X, w, y)
+    update_ch!(ch, 0, oldloss + evaluate(reg, w))
     t = time()
     for i=1:maxiters
         # gradient
         g = grad(loss, X, w, y)
         # prox gradient step
-        neww = prox(reg, w - stepsize*g, stepsize)
-        # record objective value
-        curobj = evaluate(loss, X, neww, y) + evaluate(reg, neww)
-        if curobj > ch.objective[end]
-          stepsize *= .5
-        else
-          copy!(w, neww)
-          t, told = time(), t
-          update_ch!(ch, t - told, curobj)
+        grad_step = w - stepsize*g
+        w_new = prox(reg, grad_step, stepsize)
+        # record loss value
+        curloss = evaluate(loss, X, w_new, y)
+        while curloss - oldloss >= -c*stepsize*dot(g, w_new - w) # gradient approximation is not good
+            stepsize /= 2
+            grad_step = w - stepsize*g
+            w_new = prox(reg, grad_step, stepsize)
+            curloss = evaluate(loss, X, w_new, y)
         end
+        # take the step
+        copy!(w, w_new)
+        oldloss = curloss
+        # record objective value and elapsed time
+        t, told = time(), t
+        update_ch!(ch, t - told, curloss + evaluate(reg, w))
     end
     return w
 end
 
+"""proximal gradient method with decreasing stepsize"""
 function proxgrad_dec(loss::Loss, reg::Regularizer, X::Array{Float64,2}, y;
                   maxiters = 100,
-                  stepsize = 1,
+                  stepsize = 1.,
                   w = (embedding_dim(loss)==1 ? zeros(size(X,2)) : zeros(size(X,2), embedding_dim(loss))),
                   ch = ConvergenceHistory("proxgrad"),
                   verbose = true)
@@ -89,9 +79,10 @@ function proxgrad_dec(loss::Loss, reg::Regularizer, X::Array{Float64,2}, y;
     return wbest
 end
 
+"""proximal gradient method with constant stepsize"""
 function proxgrad_const(loss::Loss, reg::Regularizer, X::Array{Float64,2}, y;
                   maxiters = 100,
-                  stepsize = 1,
+                  stepsize = 1.,
                   w = (embedding_dim(loss)==1 ? zeros(size(X,2)) : zeros(size(X,2), embedding_dim(loss))),
                   ch = ConvergenceHistory("proxgrad"))
     wbest = copy(w)
